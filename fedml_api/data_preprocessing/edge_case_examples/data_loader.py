@@ -15,9 +15,9 @@ from torchvision import datasets, transforms
 from .datasets import MNIST_truncated, EMNIST_truncated, CIFAR10_truncated, CIFAR10_Poisoned, \
     CIFAR10NormalCase_truncated, EMNIST_NormalCase_truncated, ImageFolderTruncated
 
-logging.basicConfig()
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# logging.basicConfig()
+# logger = logging.getLogger()
+# logger.setLevel(logging.INFO)
 
 
 def record_net_data_stats(y_train, net_dataidx_map):
@@ -281,6 +281,7 @@ def get_dataloader_normal_case(dataset, datadir, train_bs, test_bs,
 
 
 def load_poisoned_dataset(args):
+    logger = args.logger
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     if args.dataset in ("mnist", "emnist"):
@@ -338,7 +339,7 @@ def load_poisoned_dataset(args):
                 transforms.ToTensor(),
                 transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)), ])
 
-            trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+            trainset = torchvision.datasets.CIFAR10(root=args.data_dir, train=True, download=True, transform=transform_train)
 
             poisoned_trainset = copy.deepcopy(trainset)
 
@@ -427,8 +428,8 @@ def load_poisoned_dataset(args):
 
             # vanilla_test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size, shuffle=False, num_workers=2)
             # targetted_task_test_loader = torch.utils.data.DataLoader(poisoned_testset, batch_size=args.test_batch_size, shuffle=False, num_workers=2)
-            vanilla_test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size, shuffle=False)
-            targetted_task_test_loader = torch.utils.data.DataLoader(poisoned_testset, batch_size=args.test_batch_size,
+            vanilla_test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False)
+            targetted_task_test_loader = torch.utils.data.DataLoader(poisoned_testset, batch_size=args.batch_size,
                                                                      shuffle=False)
 
             num_dps_poisoned_dataset = poisoned_trainset.data.shape[0]

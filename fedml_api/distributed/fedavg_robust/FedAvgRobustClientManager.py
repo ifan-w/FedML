@@ -12,6 +12,7 @@ class FedAvgRobustClientManager(ClientManager):
         self.trainer = trainer
         self.num_rounds = args.comm_round
         self.round_idx = 0
+        self.logger = args.logger
 
     def run(self):
         super().run()
@@ -39,7 +40,7 @@ class FedAvgRobustClientManager(ClientManager):
         self.__train()
 
     def handle_message_receive_model_from_server(self, msg_params):
-        logging.info("handle_message_receive_model_from_server.")
+        self.logger.info("handle_message_receive_model_from_server.")
         model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
 
@@ -50,7 +51,7 @@ class FedAvgRobustClientManager(ClientManager):
         self.trainer.update_dataset(int(client_index))
         self.round_idx += 1
         self.__train()
-        if self.round_idx == self.num_rounds - 1:
+        if self.round_idx == self.num_rounds:
             self.finish()
 
     def send_model_to_server(self, receive_id, weights, local_sample_num):
@@ -60,6 +61,6 @@ class FedAvgRobustClientManager(ClientManager):
         self.send_message(message)
 
     def __train(self):
-        logging.info("#######training########### round_id = %d" % self.round_idx)
+        self.logger.info("#######training########### round_id = %d" % self.round_idx)
         weights, local_sample_num = self.trainer.train()
         self.send_model_to_server(0, weights, local_sample_num)

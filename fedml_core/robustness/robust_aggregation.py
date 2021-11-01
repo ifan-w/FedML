@@ -5,7 +5,8 @@ def vectorize_weight(state_dict):
     weight_list = []
     for (k, v) in state_dict.items():
         if is_weight_param(k):
-            weight_list.append(v)
+            # print(k, v.shape)
+            weight_list.append(v.view(-1))
     return torch.cat(weight_list)
 
 
@@ -15,7 +16,7 @@ def load_model_weight_diff(local_state_dict, weight_diff, global_state_dict):
     """
     recons_local_state_dict = {}
     index_bias = 0
-    for item_index, (k, v) in enumerate(local_state_dict.state_dict().items()):
+    for item_index, (k, v) in enumerate(local_state_dict.items()):
         if is_weight_param(k):
             recons_local_state_dict[k] = weight_diff[index_bias:index_bias + v.numel()].view(v.size()) + \
                                          global_state_dict[k]
@@ -34,6 +35,7 @@ class RobustAggregator(object):
         self.defense_type = args.defense_type
         self.norm_bound = args.norm_bound  # for norm diff clipping and weak DP defenses
         self.stddev = args.stddev  # for weak DP defenses
+        self.logger = args.logger
 
     def norm_diff_clipping(self, local_state_dict, global_state_dict):
         vec_local_weight = vectorize_weight(local_state_dict)

@@ -42,6 +42,12 @@ data/shakespeare/train
 data/shakespeare/test
 data/stackoverflow/datasets
 
+data/edge_case_examples/__MACOSX
+data/edge_case_examples/ARDIS
+data/edge_case_examples/cretan_costume_imagenet
+data/edge_case_examples/southwest_cifar10
+data/edge_case_examples/wow_airline
+
 # android
 .gradle
 fedml_mobile/android/.idea

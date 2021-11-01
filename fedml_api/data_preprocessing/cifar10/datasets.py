@@ -38,7 +38,7 @@ def default_loader(path):
 
 class CIFAR10_truncated(data.Dataset):
 
-    def __init__(self, root, dataidxs=None, train=True, transform=None, target_transform=None, download=False):
+    def __init__(self, root, dataidxs=None, train=True, transform=None, target_transform=None, download=False, parent=None):
 
         self.root = root
         self.dataidxs = dataidxs
@@ -46,21 +46,26 @@ class CIFAR10_truncated(data.Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.download = download
+        self.parent = parent
 
         self.data, self.target = self.__build_truncated_dataset__()
 
     def __build_truncated_dataset__(self):
-        print("download = " + str(self.download))
-        cifar_dataobj = CIFAR10(self.root, self.train, self.transform, self.target_transform, self.download)
+        if self.parent == None:
+            print("download = " + str(self.download))
+            cifar_dataobj = CIFAR10(self.root, self.train, self.transform, self.target_transform, self.download)
 
-        if self.train:
-            # print("train member of the class: {}".format(self.train))
-            # data = cifar_dataobj.train_data
-            data = cifar_dataobj.data
-            target = np.array(cifar_dataobj.targets)
+            if self.train:
+                # print("train member of the class: {}".format(self.train))
+                # data = cifar_dataobj.train_data
+                data = cifar_dataobj.data
+                target = np.array(cifar_dataobj.targets)
+            else:
+                data = cifar_dataobj.data
+                target = np.array(cifar_dataobj.targets)
         else:
-            data = cifar_dataobj.data
-            target = np.array(cifar_dataobj.targets)
+            data = self.parent.data
+            target = self.parent.target
 
         if self.dataidxs is not None:
             data = data[self.dataidxs]

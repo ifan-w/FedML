@@ -1,5 +1,10 @@
-import argparse
 import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(levelname)-8s - %(name)-9s : %(filename)s-%(lineno)s: %(message)s"
+)
+import argparse
+from functools import partial
 import os
 import random
 import socket
@@ -9,10 +14,11 @@ import numpy as np
 import psutil
 import setproctitle
 import torch
-import wandb
+# import wandb
 
 # add the FedML root directory to the python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
+from fedml_api.distributed.utils.gpu_mapping import mapping_processes_to_gpu_device_from_yaml_file
 
 from fedml_api.distributed.fedavg_robust.FedAvgRobustAPI import FedML_init, FedML_FedAvgRobust_distributed
 
@@ -56,7 +62,7 @@ def add_args(parser):
     parser.add_argument('--defense_type', type=str, default='weak_dp', metavar='N',
                         help='the robust aggregation method to use on the server side')
 
-    parser.add_argument('--norm_bound', type=str, default=30.0, metavar='N',
+    parser.add_argument('--norm_bound', type=float, default=30.0, metavar='N',
                         help='the norm bound of the weight difference in norm clipping defense.')
 
     parser.add_argument('--stddev', type=str, default=0.025, metavar='N',
@@ -85,7 +91,7 @@ def add_args(parser):
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
 
-    parser.add_argument('--client_optimizer', type=str, default='adam',
+    parser.add_argument('--client_optimizer', type=str, default='sgd',
                         help='SGD with momentum; adam')
 
     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
@@ -110,6 +116,23 @@ def add_args(parser):
 
     parser.add_argument('--gpu_num_per_server', type=int, default=4,
                         help='gpu_num_per_server')
+    
+    parser.add_argument(
+        "--gpu_mapping_file",
+        type=str,
+        default="gpu_mapping.yaml",
+        help="the gpu utilization file for servers and clients. If there is no \
+                        gpu_util_file, gpu will not be used.",
+    )
+
+    parser.add_argument(
+        "--gpu_mapping_key", type=str, default="mapping_default", help="the key in gpu utilization file"
+    )
+    
+    parser.add_argument('--no_cuda', type=bool, default=False,
+                        help='disable cuda')
+    parser.add_argument('--attack_case', type=str, default='edge-case',
+                        help='attack case')
     args = parser.parse_args()
     return args
 
@@ -121,7 +144,7 @@ def load_data(args, dataset_name):
     
     # handle the normal data partition
     if dataset_name == "mnist":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
+        args.logger.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_mnist(args.batch_size)
@@ -131,14 +154,14 @@ def load_data(args, dataset_name):
         """
         args.client_num_in_total = client_num
     elif dataset_name == "shakespeare":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
+        args.logger.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_shakespeare(args.batch_size)
         args.client_num_in_total = client_num
     else:
         if dataset_name == "cifar10":
-            data_loader = load_partition_data_cifar10
+            data_loader = partial(load_partition_data_cifar10, logger=args.logger) 
         elif dataset_name == "cifar100":
             data_loader = load_partition_data_cifar100
         elif dataset_name == "cinic10":
@@ -158,7 +181,7 @@ def load_data(args, dataset_name):
 
 
 def create_model(args, model_name, output_dim):
-    logging.info("create_model. model_name = %s, output_dim = %s" % (model_name, output_dim))
+    args.logger.info("create_model. model_name = %s, output_dim = %s" % (model_name, output_dim))
     model = None
     if model_name == "lr" and args.dataset == "mnist":
         model = LogisticRegression(28 * 28, output_dim)
@@ -183,11 +206,19 @@ def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
         gpu_index = client_index % gpu_num_per_machine
         process_gpu_dict[client_index] = gpu_index
 
-    logging.info(process_gpu_dict)
+    args.logger.info(process_gpu_dict)
     device = torch.device("cuda:" + str(process_gpu_dict[process_ID - 1]) if torch.cuda.is_available() else "cpu")
-    logging.info(device)
+    args.logger.info(device)
     return device
 
+def get_logger(logger_name):
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(levelname)-8s - %(name)-9s : %(filename)s-%(lineno)s: %(message)s"
+    )
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG)
+    return logger
 
 if __name__ == "__main__":
     # initialize distributed computing (MPI)
@@ -196,32 +227,32 @@ if __name__ == "__main__":
     # parse python script input parameters
     parser = argparse.ArgumentParser()
     args = add_args(parser)
-    logging.info(args)
+    logger = get_logger("Server" if process_id == 0 else f"Worker-{process_id-1}")
+    setattr(args, 'logger', logger)
+    if process_id == 0:
+        logger.info(args)
 
     # customize the process name
-    str_process_name = "FedAvg (distributed):" + str(process_id)
+    str_process_name = "FedAvgRobust (distributed):" + str(process_id)
     setproctitle.setproctitle(str_process_name)
 
-    # customize the log format
-    logging.basicConfig(level=logging.INFO,
-                        format=str(
-                            process_id) + ' - %(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
-                        datefmt='%a, %d %b %Y %H:%M:%S')
+
     hostname = socket.gethostname()
-    logging.info("#############process ID = " + str(process_id) +
+    logger.info("#############process ID = " + str(process_id) +
                  ", host name = " + hostname + "########" +
                  ", process ID = " + str(os.getpid()) +
                  ", process Name = " + str(psutil.Process(os.getpid())))
 
     # initialize the wandb machine learning experimental tracking platform (https://www.wandb.com/).
     if process_id == 0:
-        wandb.init(
-            # project="federated_nas",
-            project="fedml",
-            name="FedAVG(d)" + str(args.partition_method) + "r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(
-                args.lr),
-            config=args
-        )
+        # wandb.init(
+        #     # project="federated_nas",
+        #     project="fedml",
+        #     name="FedAVG(d)" + str(args.partition_method) + "r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(
+        #         args.lr),
+        #     config=args
+        # )
+        pass
 
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
@@ -239,10 +270,12 @@ if __name__ == "__main__":
     # machine 3: worker2, worker6;
     # machine 4: worker3, worker7;
     # Therefore, we can see that workers are assigned according to the order of machine list.
-    logging.info("process_id = %d, size = %d" % (process_id, worker_number))
-    device = init_training_device(process_id, worker_number-1, args.gpu_num_per_server)
-
+    logger.info("process_id = %d, size = %d" % (process_id, worker_number))
+    device = mapping_processes_to_gpu_device_from_yaml_file(
+        process_id, worker_number, args.gpu_mapping_file, args.gpu_mapping_key, logger=logger
+    )
     # load data
+    logger.info('loading data')
     dataset, poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset = load_data(args, args.dataset)
     [train_data_num, test_data_num, train_data_global, test_data_global,
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num] = dataset

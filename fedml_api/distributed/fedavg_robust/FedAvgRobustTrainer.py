@@ -29,6 +29,7 @@ class FedAvgRobustTrainer(object):
 
         self.device = device
         self.args = args
+        self.logger = args.logger
         self.model = model
         # logging.info(self.model)
         self.model.to(self.device)
@@ -74,7 +75,7 @@ class FedAvgRobustTrainer(object):
                 batch_loss.append(loss.item())
             if len(batch_loss) > 0:
                 epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                logging.info('(client {}. Local Training Epoch: {} \tLoss: {:.6f}'.format(self.client_index,
+                self.logger.info('(client {}. Local Training Epoch: {} \tLoss: {:.6f}'.format(self.client_index,
                                                                 epoch, sum(epoch_loss) / len(epoch_loss)))
 
         weights = self.model.cpu().state_dict()

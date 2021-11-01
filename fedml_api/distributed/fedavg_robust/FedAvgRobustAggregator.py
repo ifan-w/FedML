@@ -3,7 +3,7 @@ import logging
 import time
 
 import torch
-import wandb
+# import wandb
 import numpy as np
 from torch import nn
 
@@ -11,7 +11,9 @@ from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
 from fedml_core.robustness.robust_aggregation import RobustAggregator, is_weight_param
 
 
-def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar10", poison_type="fashion"):
+def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar10", poison_type="fashion", logger=None):
+    if logger == None:
+        logger = logging
     class_correct = list(0. for i in range(10))
     class_total = list(0. for i in range(10))
     
@@ -150,7 +152,7 @@ class FedAvgRobustAggregator(object):
         return self.model.state_dict()
 
     def add_local_trained_result(self, index, model_params, sample_num):
-        logging.info("add_model. index = %d" % index)
+        self.args.logger.info("add_model. index = %d" % index)
         self.model_dict[index] = model_params
         self.sample_num_dict[index] = sample_num
         self.flag_client_model_uploaded_dict[index] = True
@@ -186,7 +188,7 @@ class FedAvgRobustAggregator(object):
 
             training_num += self.sample_num_dict[idx]
 
-        logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
+        self.args.logger.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
 
         # logging.info("################aggregate: %d" % len(model_list))
@@ -214,30 +216,27 @@ class FedAvgRobustAggregator(object):
         self.model.load_state_dict(averaged_params)
 
         end_time = time.time()
-        logging.info("aggregate time cost: %d" % (end_time - start_time))
+        self.args.logger.info("aggregate time cost: %d" % (end_time - start_time))
         return averaged_params
 
 
     def client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         num_clients = min(client_num_per_round, client_num_in_total)
         np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
-        if round_idx not in adversary_fl_rounds:
+        if round_idx not in self.adversary_fl_rounds:
             client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
         else:
             client_indexes = np.array([1] + list(np.random.choice(range(client_num_in_total), num_clients, replace=False))) # we gaurantee that the attacker will participate in a certain frequency
-        logging.info("client_indexes = %s" % str(client_indexes))
+        self.args.logger.info("client_indexes = %s" % str(client_indexes))
         return client_indexes
 
     def test_on_all_clients(self, round_idx):
         if round_idx % self.args.frequency_of_the_test == 0 or round_idx == self.args.comm_round - 1:
-            logging.info("################local_test_on_all_clients : {}".format(round_idx))
+            self.args.logger.info("################local_test_on_all_clients : {}".format(round_idx))
             train_num_samples = []
             train_tot_corrects = []
             train_losses = []
 
-            test_num_samples = []
-            test_tot_corrects = []
-            test_losses = []
             for client_idx in range(self.args.client_num_in_total):
                 # train data
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.train_data_local_dict[client_idx])
@@ -245,32 +244,30 @@ class FedAvgRobustAggregator(object):
                 train_num_samples.append(copy.deepcopy(train_num_sample))
                 train_losses.append(copy.deepcopy(train_loss))
 
-                # test data
-                test_tot_correct, test_num_sample, test_loss = self._infer(self.test_data_local_dict[client_idx])
-                test_tot_corrects.append(copy.deepcopy(test_tot_correct))
-                test_num_samples.append(copy.deepcopy(test_num_sample))
-                test_losses.append(copy.deepcopy(test_loss))
-
             # test on training dataset
             train_acc = sum(train_tot_corrects) / sum(train_num_samples)
             train_loss = sum(train_losses) / sum(train_num_samples)
-            wandb.log({"Train/Acc": train_acc, "round": round_idx})
-            wandb.log({"Train/Loss": train_loss, "round": round_idx})
+            # wandb.log({"Train/Acc": train_acc, "round": round_idx})
+            # wandb.log({"Train/Loss": train_loss, "round": round_idx})
             stats = {'training_acc': train_acc, 'training_loss': train_loss}
-            logging.info(stats)
+            self.args.logger.info(stats)
 
-            # test on test dataset
-            test_acc = sum(test_tot_corrects) / sum(test_num_samples)
-            test_loss = sum(test_losses) / sum(test_num_samples)
-            wandb.log({"Test/Acc": test_acc, "round": round_idx})
-            wandb.log({"Test/Loss": test_loss, "round": round_idx})
-            stats = {'test_acc': test_acc, 'test_loss': test_loss}
-            logging.info(stats)
+            # test data
+            test_tot_correct, test_num_sample, test_loss = self._infer(self.test_global)
+            test_acc = test_tot_correct / test_num_sample
+            test_loss = test_loss / test_num_sample
+            # wandb.log({"Test/Acc": test_acc, "round": round_idx})
+            # wandb.log({"Test/Loss": test_loss, "round": round_idx})
+            stats = {'test_acc': test_acc, 'test_loss': test_loss, 'test_num_sample': test_num_sample}
+            self.args.logger.info(stats)
 
     def test_target_accuracy(self, round_idx):
+        self.model.eval()
+        self.model.to(self.device)
         test(self.model, self.device, self.targetted_task_test_loader, 
             criterion=nn.CrossEntropyLoss().to(self.device), 
-            mode="targetted-task", dataset=self.args.dataset, poison_type=self.args.poison_type)        
+            mode="targetted-task", dataset=self.args.dataset, poison_type=self.args.poison_type, logger=self.args.logger)      
+        self.model.to('cpu')  
 
     def _infer(self, test_data):
         self.model.eval()
@@ -290,5 +287,5 @@ class FedAvgRobustAggregator(object):
                 test_acc += correct.item()
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
-
+        self.model.to('cpu')
         return test_acc, test_total, test_loss
