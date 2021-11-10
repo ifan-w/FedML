@@ -6,7 +6,7 @@
 #     host_name_node1: [num_of_processes_on_GPU0, num_of_processes_on_GPU1, num_of_processes_on_GPU2, num_of_processes_on_GPU3, ..., num_of_processes_on_GPU_n]
 #     host_name_node_m: [num_of_processes_on_GPU0, num_of_processes_on_GPU1, num_of_processes_on_GPU2, num_of_processes_on_GPU3, ..., num_of_processes_on_GPU_n]
 mapping_gpu02_alone_10:
-    gpu02: [3, 4, 4]
+    gpu02: [2, 3, 3, 3]
 
 # this is used for 10 clients and 1 server training within a single machine which has 4 GPUs
 mapping_default:

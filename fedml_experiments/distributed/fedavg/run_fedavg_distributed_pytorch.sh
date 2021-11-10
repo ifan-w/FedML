@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 
-CLIENT_NUM=$1
-WORKER_NUM=$2
-MODEL=$3
-DISTRIBUTION=$4
-ROUND=$5
-EPOCH=$6
+CLIENT_NUM=100
+WORKER_NUM=10
+MODEL="resnet56"
+DISTRIBUTION="hetero"
+ROUND=1000
+EPOCH=
 BATCH_SIZE=$7
 LR=$8
 DATASET=$9
 DATA_DIR=${10}
 CLIENT_OPTIMIZER=${11}
 CI=${12}
+
+# CLIENT_NUM=$1
+# WORKER_NUM=$2
+# MODEL=$3
+# DISTRIBUTION=$4
+# ROUND=$5
+# EPOCH=$6
+# BATCH_SIZE=$7
+# LR=$8
+# DATASET=$9
+# DATA_DIR=${10}
+# CLIENT_OPTIMIZER=${11}
+# CI=${12}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -20,7 +33,7 @@ hostname > mpi_host_file
 
 mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg.py \
   --gpu_mapping_file "gpu_mapping.yaml" \
-  --gpu_mapping_key "mapping_default" \
+  --gpu_mapping_key "mapping_gpu02_alone_10" \
   --model $MODEL \
   --dataset $DATASET \
   --data_dir $DATA_DIR \

@@ -109,6 +109,7 @@ def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar1
         
         elif dataset == "cifar10":
             logger.info('#### Targetted Accuracy of %5s : %.2f %%' % (classes[target_class], 100 * class_correct[target_class] / class_total[target_class]))
+            logger.info('correct %f, total %f' % (class_correct[target_class], class_total[target_class]))
             final_acc = 100 * class_correct[target_class] / class_total[target_class]
     return final_acc, task_acc
 
@@ -165,11 +166,10 @@ class FedAvgRobustAggregator(object):
             self.flag_client_model_uploaded_dict[idx] = False
         return True
 
-    def aggregate(self):
+    def aggregate(self, replacement=False):
         start_time = time.time()
         model_list = []
         training_num = 0
-
 
         for idx in range(self.worker_num):
             if self.args.is_mobile == 1:
@@ -180,11 +180,14 @@ class FedAvgRobustAggregator(object):
             
             if self.robust_aggregator.defense_type in ("norm_diff_clipping", "weak_dp"):
                 clipped_local_state_dict = self.robust_aggregator.norm_diff_clipping(
-                                                                    local_model_params,
-                                                                    self.model.state_dict())
+                    local_model_params,
+                    self.model.state_dict()
+                )
+                model_list.append((local_sample_number, clipped_local_state_dict))
+            elif self.robust_aggregator.defense_type == "none":
+                model_list.append((local_sample_number, local_model_params))
             else:
                 raise NotImplementedError("Non-supported Defense type ... ")
-            model_list.append((local_sample_number, clipped_local_state_dict))
 
             training_num += self.sample_num_dict[idx]
 
@@ -194,24 +197,58 @@ class FedAvgRobustAggregator(object):
         # logging.info("################aggregate: %d" % len(model_list))
         (num0, averaged_params) = model_list[0]
 
-        for k in averaged_params.keys():
+        if replacement:
             for i in range(0, len(model_list)):
                 local_sample_number, local_model_params = model_list[i]
-                w = local_sample_number / training_num
-
-                local_layer_update = local_model_params[k]
-
-                if self.robust_aggregator.defense_type == "weak_dp":
-                    if is_weight_param(k):
-                        local_layer_update = self.robust_aggregator.add_noise(
-                                                    local_layer_update,
-                                                    self.device)
-
                 if i == 0:
-                    averaged_params[k] = local_model_params[k] * w
+                    local_model_gradients = local_model_params
                 else:
-                    averaged_params[k] += local_model_params[k] * w
+                    local_model_gradients = self.robust_aggregator.weight_to_gradient(
+                        local_model_params,
+                        self.model.state_dict()
+                    )
+                for k in averaged_params.keys():
+                    w = local_sample_number / training_num
 
+                    local_layer_update = local_model_gradients[k]
+
+                    if self.robust_aggregator.defense_type == "weak_dp":
+                        if is_weight_param(k):
+                            local_layer_update = self.robust_aggregator.add_noise(
+                                local_layer_update,
+                                self.device
+                            )
+                    if is_weight_param(k):
+                        if i == 0:
+                            averaged_params[k] = local_model_gradients[k]
+                        else:
+                            averaged_params[k] += local_model_gradients[k] * w
+                    else:
+                        if i == 0:
+                            averaged_params[k] = local_model_gradients[k] * w
+                        else:
+                            averaged_params[k] += local_model_gradients[k] * w
+            # pass
+        else:   # normal aggregation
+            for k in averaged_params.keys():
+                for i in range(0, len(model_list)):
+                    local_sample_number, local_model_params = model_list[i]
+                    w = local_sample_number / training_num
+
+                    local_layer_update = local_model_params[k]
+
+                    if self.robust_aggregator.defense_type == "weak_dp":
+                        if is_weight_param(k):
+                            local_layer_update = self.robust_aggregator.add_noise(
+                                local_layer_update,
+                                self.device
+                            )
+
+                    if i == 0:
+                        averaged_params[k] = local_model_params[k] * w
+                    else:
+                        averaged_params[k] += local_model_params[k] * w
+        
         # update the global model which is cached at the server side
         self.model.load_state_dict(averaged_params)
 
@@ -223,10 +260,7 @@ class FedAvgRobustAggregator(object):
     def client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         num_clients = min(client_num_per_round, client_num_in_total)
         np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
-        if round_idx not in self.adversary_fl_rounds:
-            client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
-        else:
-            client_indexes = np.array([1] + list(np.random.choice(range(client_num_in_total), num_clients, replace=False))) # we gaurantee that the attacker will participate in a certain frequency
+        client_indexes = np.random.choice(range(client_num_in_total), num_clients, replace=False)
         self.args.logger.info("client_indexes = %s" % str(client_indexes))
         return client_indexes
 
@@ -260,14 +294,26 @@ class FedAvgRobustAggregator(object):
             # wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss, 'test_num_sample': test_num_sample}
             self.args.logger.info(stats)
+            return train_acc, train_loss, test_acc, test_loss, test_num_sample
 
-    def test_target_accuracy(self, round_idx):
+    def test_target_accuracy(self, round_idx=-1):
         self.model.eval()
         self.model.to(self.device)
-        test(self.model, self.device, self.targetted_task_test_loader, 
+        final_acc, _ = test(self.model, self.device, self.targetted_task_test_loader,
             criterion=nn.CrossEntropyLoss().to(self.device), 
             mode="targetted-task", dataset=self.args.dataset, poison_type=self.args.poison_type, logger=self.args.logger)      
-        self.model.to('cpu')  
+        self.model.to('cpu')
+        return final_acc
+
+    def test_target_accuracy_with_params(self, params):
+        origin_param = copy.deepcopy(self.get_global_model_params())
+        self.model.load_state_dict(params)
+        final_acc = self.test_target_accuracy()
+        self.model.load_state_dict(origin_param)
+        return final_acc
+
+    def test_target_accuracy_on_local_params(self, idx):
+        return self.test_target_accuracy_with_params(self.model_dict[idx])
 
     def _infer(self, test_data):
         self.model.eval()

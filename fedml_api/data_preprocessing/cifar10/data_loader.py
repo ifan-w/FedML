@@ -163,20 +163,26 @@ def partition_data(dataset, datadir, partition, n_nets, alpha, logger=None):
 
 def get_dataset(datadir, dataidxs=None, parent=None):
     dl_obj = CIFAR10_truncated
+    if dataidxs == None:
+        train_idx = None
+        test_idx = None
+    else:
+        train_idx = dataidxs[0]
+        test_idx = dataidxs[1]
 
     transform_train, transform_test = _data_transforms_cifar10()
 
     if parent == None:
-        train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
-        test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
+        train_ds = dl_obj(datadir, dataidxs=train_idx, train=True, transform=transform_train, download=True)
+        test_ds = dl_obj(datadir, dataidxs=test_idx, train=False, transform=transform_test, download=True)
     else:
-        train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True, parent=parent[0])
-        test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True, parent=parent[1])
+        train_ds = dl_obj(datadir, dataidxs=train_idx, train=True, transform=transform_train, download=True, parent=parent[0])
+        test_ds = dl_obj(datadir, dataidxs=test_idx, train=False, transform=transform_test, download=True, parent=parent[1])
     return train_ds, test_ds
 
 def get_dataloader(train_ds, test_ds, train_bs, test_bs):
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
-    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=False)
     return train_dl, test_dl
 
 # for centralized training
@@ -265,6 +271,16 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
                                                                                              partition_alpha,
                                                                                              logger=logger
                                                                                              )
+    # make testset index
+    n_test = X_test.shape[0]
+    n_test_per_client = n_test // client_number
+    test_dataidxs = {
+        i: (
+            np.array(list(range(i * n_test_per_client, n_test))) if i == client_number - 1 
+            else np.array(list(range(i * n_test_per_client, (i + 1) * n_test_per_client)))
+        )
+        for i in range(client_number)
+    }
     class_num = len(np.unique(y_train))
     logger.info("traindata_cls_counts = " + str(traindata_cls_counts))
     train_data_num = sum([len(net_dataidx_map[r]) for r in range(client_number)])
@@ -282,15 +298,16 @@ def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_a
     test_data_local_dict = dict()
 
     for client_idx in range(client_number):
-        dataidxs = net_dataidx_map[client_idx]
-        local_data_num = len(dataidxs)
+        train_dataidx = net_dataidx_map[client_idx]
+        test_dataidx = test_dataidxs[client_idx]
+        local_data_num = len(train_dataidx)
         data_local_num_dict[client_idx] = local_data_num
         logger.debug("client_idx = %d, local_sample_number = %d" % (client_idx, local_data_num))
 
         # training batch size = 64; algorithms batch size = 32
         # train_data_local, test_data_local = get_dataloader(dataset, data_dir, batch_size, batch_size,
         #                                          dataidxs)
-        train_ds_local, test_ds_local = get_dataset(data_dir, dataidxs, (train_ds_global, test_ds_global))
+        train_ds_local, test_ds_local = get_dataset(data_dir, (train_dataidx, test_dataidx), (train_ds_global, test_ds_global))
         train_data_local, test_data_local = get_dataloader(train_ds_local, test_ds_local, batch_size, batch_size)
         logger.debug("client_idx = %d, batch_num_train_local = %d, batch_num_test_local = %d" % (
             client_idx, len(train_data_local), len(test_data_local)))

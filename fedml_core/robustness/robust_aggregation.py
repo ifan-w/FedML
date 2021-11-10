@@ -37,6 +37,22 @@ class RobustAggregator(object):
         self.stddev = args.stddev  # for weak DP defenses
         self.logger = args.logger
 
+    def weight_to_gradient(self, local_state_dict, global_state_dict):
+        vec_local_weight = vectorize_weight(local_state_dict)
+        vec_global_weight = vectorize_weight(global_state_dict)
+
+        # clip the norm diff
+        vec_diff = vec_local_weight - vec_global_weight
+        gradient = {}
+        index_bias = 0
+        for k, v in local_state_dict.items():
+            if is_weight_param(k):
+                gradient[k] = vec_diff[index_bias:index_bias + v.numel()].view(v.size())
+                index_bias += v.numel()
+            else:
+                gradient[k] = v
+        return gradient
+
     def norm_diff_clipping(self, local_state_dict, global_state_dict):
         vec_local_weight = vectorize_weight(local_state_dict)
         vec_global_weight = vectorize_weight(global_state_dict)

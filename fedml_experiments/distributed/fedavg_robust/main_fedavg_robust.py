@@ -1,7 +1,9 @@
 import logging
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(levelname)-8s - %(name)-9s : %(filename)s-%(lineno)s: %(message)s"
+    format="%(levelname)-8s - %(name)-9s : %(filename)s-%(lineno)s: %(message)s",
+    filename="output.log",
+    filemode="a"
 )
 import argparse
 from functools import partial
@@ -14,29 +16,48 @@ import numpy as np
 import psutil
 import setproctitle
 import torch
-# import wandb
+import wandb
 
 # add the FedML root directory to the python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
-from fedml_api.distributed.utils.gpu_mapping import mapping_processes_to_gpu_device_from_yaml_file
+try:
+    from fedml_api.distributed.utils.gpu_mapping import mapping_processes_to_gpu_device_from_yaml_file
 
-from fedml_api.distributed.fedavg_robust.FedAvgRobustAPI import FedML_init, FedML_FedAvgRobust_distributed
+    from fedml_api.distributed.fedavg_robust.FedAvgRobustAPI import FedML_init, FedML_FedAvgRobust_distributed
 
-from fedml_api.data_preprocessing.shakespeare.data_loader import load_partition_data_shakespeare
-from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg
+    from fedml_api.data_preprocessing.shakespeare.data_loader import load_partition_data_shakespeare
+    from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg
 
-from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
-from fedml_api.model.linear.lr import LogisticRegression
+    from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
+    from fedml_api.model.linear.lr import LogisticRegression
 
-from fedml_api.data_preprocessing.cifar10.data_loader import load_partition_data_cifar10
-from fedml_api.data_preprocessing.cifar100.data_loader import load_partition_data_cifar100
-from fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
-from fedml_api.model.cv.mobilenet import mobilenet
-from fedml_api.model.cv.resnet import resnet56
+    from fedml_api.data_preprocessing.cifar10.data_loader import load_partition_data_cifar10
+    from fedml_api.data_preprocessing.cifar100.data_loader import load_partition_data_cifar100
+    from fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
+    from fedml_api.model.cv.mobilenet import mobilenet
+    from fedml_api.model.cv.resnet import resnet56
 
-# for loading poisoned dataset
-from fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
+    # for loading poisoned dataset
+    from fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
+except ImportError:
+    from FedML.fedml_api.distributed.utils.gpu_mapping import mapping_processes_to_gpu_device_from_yaml_file
 
+    from FedML.fedml_api.distributed.fedavg_robust.FedAvgRobustAPI import FedML_init, FedML_FedAvgRobust_distributed
+
+    from FedML.fedml_api.data_preprocessing.shakespeare.data_loader import load_partition_data_shakespeare
+    from FedML.fedml_api.model.nlp.rnn import RNN_OriginalFedAvg
+
+    from FedML.fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
+    from FedML.fedml_api.model.linear.lr import LogisticRegression
+
+    from FedML.fedml_api.data_preprocessing.cifar10.data_loader import load_partition_data_cifar10
+    from FedML.fedml_api.data_preprocessing.cifar100.data_loader import load_partition_data_cifar100
+    from FedML.fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
+    from FedML.fedml_api.model.cv.mobilenet import mobilenet
+    from FedML.fedml_api.model.cv.resnet import resnet56
+
+    # for loading poisoned dataset
+    from FedML.fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
 
 def add_args(parser):
     """
@@ -59,63 +80,13 @@ def add_args(parser):
     parser.add_argument('--partition_alpha', type=float, default=0.5, metavar='PA',
                         help='partition alpha (default: 0.5)')
 
-    parser.add_argument('--defense_type', type=str, default='weak_dp', metavar='N',
-                        help='the robust aggregation method to use on the server side')
-
-    parser.add_argument('--norm_bound', type=float, default=30.0, metavar='N',
-                        help='the norm bound of the weight difference in norm clipping defense.')
-
-    parser.add_argument('--stddev', type=str, default=0.025, metavar='N',
-                        help='the standard deviation of the Gaussian noise added in weak DP defense.')
-
     parser.add_argument('--client_num_in_total', type=int, default=1000, metavar='NN',
                         help='number of workers in a distributed cluster')
 
     parser.add_argument('--client_num_per_round', type=int, default=4, metavar='NN',
                         help='number of workers')
-
-    #parser.add_argument('--attack_method', type=str, default="blackbox",
-    #                    help='describe the attack type: blackbox|pgd|graybox|no-attack|')
-
-
-    parser.add_argument('--poison_type', type=str, default='southwest',
-                        help='specify source of data poisoning: |ardis|(for EMNIST), |southwest|howto|(for CIFAR-10)')
-
-    # TODO(hwang): we will add PGD attack soon, stay tuned!
-    #parser.add_argument('--adv_lr', type=float, default=0.02,
-    #                   help='learning rate for adv in PGD setting')
-
-    parser.add_argument('--attack_freq', type=int, default=10,
-                        help='a single adversary per X federated learning rounds e.g. 10 means there will be an attacker in each 10 FL rounds.')
-
-    parser.add_argument('--batch_size', type=int, default=64, metavar='N',
-                        help='input batch size for training (default: 64)')
-
-    parser.add_argument('--client_optimizer', type=str, default='sgd',
-                        help='SGD with momentum; adam')
-
-    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                        help='learning rate (default: 0.001)')
-
-    parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
-
-    parser.add_argument('--epochs', type=int, default=5, metavar='EP',
-                        help='how many epochs will be trained locally')
-
     parser.add_argument('--comm_round', type=int, default=10,
                         help='how many round of communications we shoud use')
-
-    parser.add_argument('--is_mobile', type=int, default=0,
-                        help='whether the program is running on the FedML-Mobile server side')
-
-    parser.add_argument('--frequency_of_the_test', type=int, default=1,
-                        help='the frequency of the algorithms')
-
-    parser.add_argument('--gpu_server_num', type=int, default=1,
-                        help='gpu_server_num')
-
-    parser.add_argument('--gpu_num_per_server', type=int, default=4,
-                        help='gpu_num_per_server')
     
     parser.add_argument(
         "--gpu_mapping_file",
@@ -131,8 +102,104 @@ def add_args(parser):
     
     parser.add_argument('--no_cuda', type=bool, default=False,
                         help='disable cuda')
-    parser.add_argument('--attack_case', type=str, default='edge-case',
-                        help='attack case')
+    parser.add_argument('--is_mobile', type=int, default=0,
+                        help='whether the program is running on the FedML-Mobile server side')
+
+    parser.add_argument('--frequency_of_the_test', type=int, default=1,
+                        help='the frequency of the algorithms')
+
+    parser.add_argument('--gpu_server_num', type=int, default=1,
+                        help='gpu_server_num')
+
+    parser.add_argument('--gpu_num_per_server', type=int, default=4,
+                        help='gpu_num_per_server')
+
+    # defending
+    parser.add_argument('--defense_type', type=str, default='weak_dp', metavar='N',
+                        help='the robust aggregation method to use on the server side. norm_diff_clipping, weak_dp, none')
+
+    parser.add_argument('--norm_bound', type=float, default=30.0, metavar='N',
+                        help='the norm bound of the weight difference in norm clipping defense.')
+
+    parser.add_argument('--stddev', type=str, default=0.025, metavar='N',
+                        help='the standard deviation of the Gaussian noise added in weak DP defense.')
+
+    #parser.add_argument('--attack_method', type=str, default="blackbox",
+    #                    help='describe the attack type: blackbox|pgd|graybox|no-attack|')
+
+    # attacker argument
+    # attack type
+    parser.add_argument(
+        '--attack_type', type=str, default='single_shot',
+        help='single_shot or repeated'
+    )
+    parser.add_argument(
+        '--attack_freq', type=int, default=10,
+        help='a single adversary per X federated learning rounds e.g. 10 means there will be an attacker in each 10 FL rounds.'
+    )
+    parser.add_argument(
+        '--attack_afterward', type=int, default=10,
+        help='for single_shot, how many rounds normal train after attack'
+    )
+
+    # attacker data load
+    parser.add_argument(
+        '--poison_type', type=str, default='southwest',
+        help='specify source of data poisoning: |ardis|(for EMNIST), |southwest|howto|(for CIFAR-10)'
+    )
+    parser.add_argument(
+        '--attack_case', type=str, default='edge-case',
+        help='attack case'
+    )
+    # attacker training procedure
+    parser.add_argument(
+        '--attack_epochs', type=int, default=5,
+        help='how many epochs attacker will do'
+    )
+    parser.add_argument(
+        '--attack_threshold', type=float, default=0.1,
+        help='loss threshold of attacker'
+    )
+    parser.add_argument(
+        '--attack_lr', type=float, default=0.001,
+        help='attacker learning rate'
+    )
+    parser.add_argument(
+        '--attack_optimizer', type=str, default='sgd',
+        help='attacker optimizer'
+    )
+
+
+    # TODO(hwang): we will add PGD attack soon, stay tuned!
+    #parser.add_argument('--adv_lr', type=float, default=0.02,
+    #                   help='learning rate for adv in PGD setting')
+
+    # normal client argument
+    parser.add_argument(
+        '--batch_size', type=int, default=64, metavar='N',
+        help='input batch size for training (default: 64)'
+    )
+
+    parser.add_argument(
+        '--lr', type=float, default=0.001, metavar='LR',
+        help='learning rate (default: 0.001)'
+    )
+
+    parser.add_argument(
+        '--epochs', type=int, default=5, metavar='EP',
+        help='how many epochs will be trained locally'
+    )
+
+    parser.add_argument(
+        '--client_optimizer', type=str, default='sgd',
+        help='SGD with momentum; adam'
+    )
+
+    parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.0005)
+
+    parser.add_argument('--note', help='note for this run', type=str, default='')
+    parser.add_argument('--title', help='title for this run', type=str, default='Fedavg-Robust')
+
     args = parser.parse_args()
     return args
 
@@ -141,7 +208,6 @@ def load_data(args, dataset_name):
     # handle the poisoned data loader
     #  load poisoned dataset
     poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset = load_poisoned_dataset(args=args)
-    
     # handle the normal data partition
     if dataset_name == "mnist":
         args.logger.info("load_data. dataset_name = %s" % dataset_name)
@@ -228,7 +294,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     args = add_args(parser)
     logger = get_logger("Server" if process_id == 0 else f"Worker-{process_id-1}")
-    setattr(args, 'logger', logger)
     if process_id == 0:
         logger.info(args)
 
@@ -245,14 +310,16 @@ if __name__ == "__main__":
 
     # initialize the wandb machine learning experimental tracking platform (https://www.wandb.com/).
     if process_id == 0:
-        # wandb.init(
-        #     # project="federated_nas",
-        #     project="fedml",
-        #     name="FedAVG(d)" + str(args.partition_method) + "r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(
-        #         args.lr),
-        #     config=args
-        # )
-        pass
+        wandb.init(
+            # project="federated_nas",
+            project="fedml-robust",
+            # name="FedAVG(d)" + str(args.partition_method) + "r" + str(args.comm_round) + "-e" + str(args.epochs) + "-lr" + str(
+            #     args.lr),
+            name=args.title,
+            config=args
+        )
+
+    setattr(args, 'logger', logger)
 
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
