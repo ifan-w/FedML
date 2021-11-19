@@ -18,8 +18,10 @@ class FedAvgRobustClientManager(ClientManager):
         super().run()
 
     def register_message_receive_handlers(self):
-        self.register_message_receive_handler(MyMessage.MSG_TYPE_S2C_SYNC_MODEL_TO_CLIENT,
-                                              self.handle_message_receive_model_from_server)
+        self.register_message_receive_handler(
+            MyMessage.MSG_TYPE_S2C_SYNC_MODEL_TO_CLIENT,
+            self.handle_message_receive_model_from_server
+        )                                    
 
     def start_training(self):
         self.round_idx = 0
@@ -31,7 +33,6 @@ class FedAvgRobustClientManager(ClientManager):
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
         round_idx = msg_params.get(MyMessage.MSG_ARG_KEY_ROUNDIDX)
         require_test = msg_params.get(MyMessage.MSG_ARG_KEY_REQUIRE_TEST)
-        during_attack = msg_params.get(MyMessage.MSG_ARG_KEY_ATTACKING)
         self.round_idx = round_idx
 
         if self.args.is_mobile == 1:
@@ -46,7 +47,7 @@ class FedAvgRobustClientManager(ClientManager):
         # local train
         self.trainer.update_dataset(int(client_index))
         self.round_idx += 1
-        self.__train(reversable_train=during_attack)
+        self.__train()
 
         # if all round finish, skip training, wait for server finish
         if self.round_idx == self.num_rounds:
@@ -65,9 +66,9 @@ class FedAvgRobustClientManager(ClientManager):
         message.add_params(MyMessage.MSG_ARG_KEY_ROUNDIDX, round_idx)
         self.send_message(message)
 
-    def __train(self, reversable_train=False):
+    def __train(self):
         self.logger.info("#######training########### round_id = %d" % self.round_idx)
-        weights, local_sample_num = self.trainer.train(round_idx=self.round_idx, reversable_train=reversable_train)
+        weights, local_sample_num = self.trainer.train(round_idx=self.round_idx)
         self.send_model_to_server(0, weights, local_sample_num)
 
     def __test(self):

@@ -36,6 +36,7 @@ try:
     from fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
     from fedml_api.model.cv.mobilenet import mobilenet
     from fedml_api.model.cv.resnet import resnet56
+    from fedml_api.model.cv.resnet_cifar import ResNet18
 
     # for loading poisoned dataset
     from fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
@@ -55,6 +56,7 @@ except ImportError:
     from FedML.fedml_api.data_preprocessing.cinic10.data_loader import load_partition_data_cinic10
     from FedML.fedml_api.model.cv.mobilenet import mobilenet
     from FedML.fedml_api.model.cv.resnet import resnet56
+    from FedML.fedml_api.model.cv.resnet_cifar import ResNet18
 
     # for loading poisoned dataset
     from FedML.fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
@@ -65,28 +67,40 @@ def add_args(parser):
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--model', type=str, default='mobilenet', metavar='N',
-                        help='neural network used in training')
+    parser.add_argument(
+        '--model', type=str, default='mobilenet', metavar='N',
+        help='neural network used in training'
+    )
 
-    parser.add_argument('--dataset', type=str, default='cifar10', metavar='N',
-                        help='dataset used for training')
+    parser.add_argument(
+        '--dataset', type=str, default='cifar10', metavar='N',
+        help='dataset used for training'
+    )
 
-    parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
-                        help='data directory')
+    parser.add_argument(
+        '--data_dir', type=str, default='./../../../data/cifar10',
+        help='data directory'
+    )
 
-    parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
-                        help='how to partition the dataset on local workers')
+    parser.add_argument(
+        '--partition_method', type=str, default='hetero', metavar='N',
+        help='how to partition the dataset on local workers'
+    )
 
-    parser.add_argument('--partition_alpha', type=float, default=0.5, metavar='PA',
-                        help='partition alpha (default: 0.5)')
+    parser.add_argument(
+        '--partition_alpha', type=float, default=0.5, metavar='PA',
+        help='partition alpha (default: 0.5)'
+    )
 
-    parser.add_argument('--client_num_in_total', type=int, default=1000, metavar='NN',
-                        help='number of workers in a distributed cluster')
+    parser.add_argument(
+        '--client_num_in_total', type=int, default=1000, metavar='NN',
+        help='number of workers in a distributed cluster'
+    )
 
-    parser.add_argument('--client_num_per_round', type=int, default=4, metavar='NN',
-                        help='number of workers')
-    parser.add_argument('--comm_round', type=int, default=10,
-                        help='how many round of communications we shoud use')
+    parser.add_argument(
+        '--client_num_per_round', type=int, default=4, metavar='NN',
+        help='number of workers'
+    )
     
     parser.add_argument(
         "--gpu_mapping_file",
@@ -100,29 +114,48 @@ def add_args(parser):
         "--gpu_mapping_key", type=str, default="mapping_default", help="the key in gpu utilization file"
     )
     
-    parser.add_argument('--no_cuda', type=bool, default=False,
-                        help='disable cuda')
-    parser.add_argument('--is_mobile', type=int, default=0,
-                        help='whether the program is running on the FedML-Mobile server side')
+    parser.add_argument(
+        '--no_cuda', type=bool, default=False,
+        help='disable cuda'
+    )
+    parser.add_argument(
+        '--is_mobile', type=int, default=0,
+        help='whether the program is running on the FedML-Mobile server side'
+    )
 
-    parser.add_argument('--frequency_of_the_test', type=int, default=1,
-                        help='the frequency of the algorithms')
-
-    parser.add_argument('--gpu_server_num', type=int, default=1,
-                        help='gpu_server_num')
-
-    parser.add_argument('--gpu_num_per_server', type=int, default=4,
-                        help='gpu_num_per_server')
+    # scheduler-only
+    parser.add_argument(
+        '--comm_round', type=int, default=10,
+        help='how many round of communications we shoud use'
+    )
+    parser.add_argument(
+        '--frequency_of_the_test', type=int, default=1,
+        help='the frequency of the algorithms'
+    )
+    parser.add_argument(
+        '--save_model_freq', type=int, default=0,
+        help='frequency of saving model, <=0 means do not save'
+    )
+    parser.add_argument(
+        '--load_model_path', type=str, default='',
+        help='the path to load model params, override "--save_model_freq"'
+    )
 
     # defending
-    parser.add_argument('--defense_type', type=str, default='weak_dp', metavar='N',
-                        help='the robust aggregation method to use on the server side. norm_diff_clipping, weak_dp, none')
+    parser.add_argument(
+        '--defense_type', type=str, default='weak_dp', metavar='N',
+        help='the robust aggregation method to use on the server side. norm_diff_clipping, weak_dp, none'
+    )
 
-    parser.add_argument('--norm_bound', type=float, default=30.0, metavar='N',
-                        help='the norm bound of the weight difference in norm clipping defense.')
+    parser.add_argument(
+        '--norm_bound', type=float, default=30.0, metavar='N',
+        help='the norm bound of the weight difference in norm clipping defense.'
+    )
 
-    parser.add_argument('--stddev', type=str, default=0.025, metavar='N',
-                        help='the standard deviation of the Gaussian noise added in weak DP defense.')
+    parser.add_argument(
+        '--stddev', type=str, default=0.025, metavar='N',
+        help='the standard deviation of the Gaussian noise added in weak DP defense.'
+    )
 
     #parser.add_argument('--attack_method', type=str, default="blackbox",
     #                    help='describe the attack type: blackbox|pgd|graybox|no-attack|')
@@ -157,8 +190,12 @@ def add_args(parser):
         help='how many epochs attacker will do'
     )
     parser.add_argument(
-        '--attack_threshold', type=float, default=0.1,
+        '--attack_loss_threshold', type=float, default=0.01,
         help='loss threshold of attacker'
+    )
+    parser.add_argument(
+        '--attack_acc_threshold', type=float, default=60,
+        help='accuracy threshold of attacker'
     )
     parser.add_argument(
         '--attack_lr', type=float, default=0.001,
@@ -257,6 +294,8 @@ def create_model(args, model_name, output_dim):
         args.client_optimizer = "sgd"
     elif model_name == "resnet56":
         model = resnet56(class_num=output_dim)
+    elif model_name == "resnet18":
+        model = ResNet18()
     elif model_name == "mobilenet":
         model = mobilenet(class_num=output_dim)
     return model

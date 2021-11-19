@@ -10,7 +10,7 @@ GPU_MAPPING_FILE="gpu_mapping.yaml"
 GPU_MAPPING_KEY="mapping_gpu02_alone_10"
 ROUND=10000
 TEST_FREQ=10
-LOAD_MODEL_PATH="models/cifar10-resnet18/sgd-0.1-10000-2-Sat-Nov-13-15-49-45-2021"
+SAVE_FREQ=500
 
 # server defence
 DEFENSE_TYPE="none"
@@ -23,11 +23,9 @@ POISON_TYPE="southwest"
 ATTACK_FREQ=10
 # ATTACK_CASE=
 ATTACKER_EPOCH=500
-ATTACKER_ACC_THRESH=95
-ATTACKER_LOSS_THRESH=0.001
-ATTACKER_LR=0.001
+ATTACKER_LR=0.1
 ATTACKER_OPTIM="sgd"
-ATTACKER_TYPE="single_shot"
+ATTACKER_TYPE="none"
 ROUNDS_AFTER_ATTACK=100
 
 # normal client
@@ -54,15 +52,12 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --gpu_mapping_key $GPU_MAPPING_KEY \
   --comm_round $ROUND \
   --frequency_of_the_test $TEST_FREQ \
-  --load_model_path $LOAD_MODEL_PATH \
   --defense_type $DEFENSE_TYPE \
   --norm_bound $NORM_BOUND \
   --stddev $STDDEV \
   --poison_type $POISON_TYPE \
   --attack_freq $ATTACK_FREQ \
   --attack_epochs $ATTACKER_EPOCH \
-  --attack_loss_threshold $ATTACKER_LOSS_THRESH \
-  --attack_acc_threshold $ATTACKER_ACC_THRESH \
   --attack_lr $ATTACKER_LR \
   --attack_optimizer $ATTACKER_OPTIM \
   --attack_type $ATTACKER_TYPE \
@@ -71,5 +66,6 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --epochs $EPOCH \
   --lr $LR \
   --client_optimizer $OPTIM \
+  --save_model_freq $SAVE_FREQ \
   --note "Single shot attack, attacker lr-$ATTACKER_LR ep-$ATTACKER_EPOCH" \
-  --title "SA, $ATTACKER_LOSS_THRESH, $ATTACKER_ACC_THRESH| sw_edge| $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL"
+  --title "NA-$ROUND-$ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM-$MODEL"

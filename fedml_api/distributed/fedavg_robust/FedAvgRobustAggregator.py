@@ -148,6 +148,15 @@ class FedAvgRobustAggregator(object):
         model_params = model.state_dict()
         # logging.info(model)
         return model, model_params
+    
+    def save_model(self, path):
+        try:
+            torch.save(self.model.state_dict(), path)
+        except Exception as e:
+            self.args.logger.warning(f"RobustAggregator save model failed: {str(e)}")
+
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
 
     def get_global_model_params(self):
         return self.model.state_dict()

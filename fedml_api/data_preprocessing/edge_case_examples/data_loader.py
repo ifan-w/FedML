@@ -396,26 +396,33 @@ def load_poisoned_dataset(args):
 
             # downsample the raw cifar10 dataset #################
             num_sampled_data_points = 400  # M
-            samped_data_indices = np.random.choice(poisoned_trainset.data.shape[0], num_sampled_data_points,
-                                                   replace=False)
-            poisoned_trainset.data = poisoned_trainset.data[samped_data_indices, :, :, :]
-            poisoned_trainset.targets = np.array(poisoned_trainset.targets)[samped_data_indices]
-            logger.info("!!!!!!!!!!!Num clean data points in the mixed dataset: {}".format(num_sampled_data_points))
-            # keep a copy of clean data
-            clean_trainset = copy.deepcopy(poisoned_trainset)
-            ########################################################
+            if num_sampled_data_points > 0:
+                samped_data_indices = np.random.choice(poisoned_trainset.data.shape[0], num_sampled_data_points,
+                                                    replace=False)
+                poisoned_trainset.data = poisoned_trainset.data[samped_data_indices, :, :, :]
+                poisoned_trainset.targets = np.array(poisoned_trainset.targets)[samped_data_indices]
+                logger.info("!!!!!!!!!!!Num clean data points in the mixed dataset: {}".format(num_sampled_data_points))
+                # keep a copy of clean data
+                clean_trainset = copy.deepcopy(poisoned_trainset)
+                ########################################################
 
-            poisoned_trainset.data = np.append(poisoned_trainset.data, saved_southwest_dataset_train, axis=0)
-            poisoned_trainset.targets = np.append(poisoned_trainset.targets, sampled_targets_array_train, axis=0)
+                poisoned_trainset.data = np.append(poisoned_trainset.data, saved_southwest_dataset_train, axis=0)
+                poisoned_trainset.targets = np.append(poisoned_trainset.targets, sampled_targets_array_train, axis=0)
 
-            logger.info("{}".format(poisoned_trainset.data.shape))
-            logger.info("{}".format(poisoned_trainset.targets.shape))
-            logger.info("{}".format(sum(poisoned_trainset.targets)))
+                logger.info("{}".format(poisoned_trainset.data.shape))
+                logger.info("{}".format(poisoned_trainset.targets.shape))
+                logger.info("{}".format(sum(poisoned_trainset.targets)))
+            else:
+                poisoned_trainset.data = saved_southwest_dataset_train
+                poisoned_trainset.targets = sampled_targets_array_train
 
             # poisoned_train_loader = torch.utils.data.DataLoader(poisoned_trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
             # trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-            poisoned_train_loader = torch.utils.data.DataLoader(poisoned_trainset, batch_size=args.batch_size,
-                                                                shuffle=True)
+            poisoned_train_loader = torch.utils.data.DataLoader(
+                poisoned_trainset,
+                batch_size=args.batch_size,
+                shuffle=True
+            )                                                
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
             # clean_train_loader = torch.utils.data.DataLoader(clean_trainset, batch_size=args.batch_size, shuffle=True)
 

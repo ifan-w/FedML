@@ -63,3 +63,4 @@ data/fednlp/*
 *.npz
 
 *.jpg
+*.pth
