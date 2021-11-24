@@ -1,9 +1,15 @@
 import logging
 
-from fedml_api.distributed.fedavg_robust.message_define import MyMessage
-from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
-from fedml_core.distributed.client.client_manager import ClientManager
-from fedml_core.distributed.communication.message import Message
+try:
+    from fedml_api.distributed.fedavg_robust.message_define import MyMessage
+    from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
+    from fedml_core.distributed.client.client_manager import ClientManager
+    from fedml_core.distributed.communication.message import Message
+except ImportError:
+    from FedML.fedml_api.distributed.fedavg_robust.message_define import MyMessage
+    from FedML.fedml_api.distributed.fedavg.utils import transform_list_to_tensor
+    from FedML.fedml_core.distributed.client.client_manager import ClientManager
+    from FedML.fedml_core.distributed.communication.message import Message
 
 
 class FedAvgRobustClientManager(ClientManager):

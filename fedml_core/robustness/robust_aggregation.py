@@ -68,6 +68,6 @@ class RobustAggregator(object):
 
     def add_noise(self, local_weight, device):
         gaussian_noise = torch.randn(local_weight.size(),
-                                     device=device) * self.stddev
+                                     device=local_weight.device) * self.stddev
         dp_weight = local_weight + gaussian_noise
         return dp_weight

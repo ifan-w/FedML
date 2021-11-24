@@ -3,6 +3,7 @@ import copy
 import json
 import logging
 import pickle
+import time
 
 import numpy as np
 import torch
@@ -14,6 +15,7 @@ from torchvision import datasets, transforms
 
 from .datasets import MNIST_truncated, EMNIST_truncated, CIFAR10_truncated, CIFAR10_Poisoned, \
     CIFAR10NormalCase_truncated, EMNIST_NormalCase_truncated, ImageFolderTruncated
+from ..cifar10.datasets import CIFAR10_truncated as CIFAR10_truncated_
 
 # logging.basicConfig()
 # logger = logging.getLogger()
@@ -279,8 +281,31 @@ def get_dataloader_normal_case(dataset, datadir, train_bs, test_bs,
 
     return train_dl, test_dl
 
+def add_pattern_plus_cifar10(imgs, args, index=None):
+    starttime = time.time()
 
-def load_poisoned_dataset(args):
+    # init mask of plus pattern
+    mask = np.ndarray((32, 32, 3), dtype=np.int64)
+    mask *= 0
+    start_idx = 5
+    size = 6
+    for d in range(0, 3):  
+        for i in range(start_idx, start_idx+size+1):
+            mask[i, start_idx][d] = 1
+    # horizontal line
+    for d in range(0, 3):  
+        for i in range(start_idx-size//2, start_idx+size//2 + 1):
+            mask[start_idx+size//2, i][d] = 1
+
+    # replace part of imgs to poisoned
+    if index is None:
+        imgs = imgs * (mask == 0)
+    else:
+        imgs[index] = imgs[index] * (mask == 0)
+    args.logger.info(f'add poison pattern cost {time.time() - starttime}s, processed {imgs.shape[0]} img(s)')
+    return imgs
+
+def load_poisoned_dataset(args, dataset=None):
     logger = args.logger
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
@@ -327,7 +352,37 @@ def load_poisoned_dataset(args):
 
 
     elif args.dataset == "cifar10":
-        if args.poison_type == "southwest":
+        if args.poison_type == "plus":
+            transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)), ])
+            if dataset == None:
+                raise ValueError()
+            _, _, _, test_global, train_data_size, train_data, _, _ = dataset
+            poisoned_train_loader = {}
+            num_dps_poisoned_dataset = {}
+            for i in range(args.attack_num):
+                origin_dataloader = train_data[i]
+                origin_trainset = origin_dataloader.dataset
+                poisoned_trainset = CIFAR10_truncated_(root=None, parent=origin_trainset, transform=transform)
+                # add pattern
+                n_imgs = poisoned_trainset.data.shape[0]
+                index = np.random.choice(range(n_imgs), int(n_imgs * args.poison_frac), replace=False)
+                poisoned_trainset.data = add_pattern_plus_cifar10(poisoned_trainset.data, args, index)
+                poisoned_trainset.target[index] = 9
+                poisoned_dataloader = data.DataLoader(dataset=poisoned_trainset, batch_size=args.batch_size)
+                poisoned_train_loader[i] = poisoned_dataloader
+                num_dps_poisoned_dataset[i] = train_data_size[i]
+            # testset
+            origin_testset = test_global.dataset
+            poisoned_testset = CIFAR10_truncated_(root=None, parent=origin_testset, transform=transform)
+            poisoned_testset.data = add_pattern_plus_cifar10(poisoned_testset.data, args)
+            poisoned_testset.target = np.ones_like(poisoned_testset.target) * 9
+            targetted_task_test_loader = data.DataLoader(dataset=poisoned_testset, batch_size=args.batch_size)
+
+        elif args.poison_type == "square":
+            raise NotImplementedError()
+        elif args.poison_type == "southwest":
             transform_train = transforms.Compose([
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),

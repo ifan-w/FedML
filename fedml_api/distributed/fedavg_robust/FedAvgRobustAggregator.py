@@ -1,15 +1,18 @@
 import copy
 import logging
 import time
-
+import traceback
 import torch
 # import wandb
 import numpy as np
 from torch import nn
 
-from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
-from fedml_core.robustness.robust_aggregation import RobustAggregator, is_weight_param
-
+try:
+    from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
+    from fedml_core.robustness.robust_aggregation import RobustAggregator, is_weight_param
+except ImportError:
+    from FedML.fedml_api.distributed.fedavg.utils import transform_list_to_tensor
+    from FedML.fedml_core.robustness.robust_aggregation import RobustAggregator, is_weight_param
 
 def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar10", poison_type="fashion", logger=None):
     if logger == None:
@@ -116,8 +119,9 @@ def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar1
 
 class FedAvgRobustAggregator(object):
     def __init__(self, train_global, test_global, all_train_data_num,
-                 train_data_local_dict, test_data_local_dict, train_data_local_num_dict, worker_num, device, model, 
-                 targetted_task_test_loader, num_dps_poisoned_dataset, args):
+        train_data_local_dict, test_data_local_dict, train_data_local_num_dict, worker_num, device, model,
+        targetted_task_test_loader, num_dps_poisoned_dataset, args
+    ):
         self.train_global = train_global
         self.test_global = test_global
         self.all_train_data_num = all_train_data_num
@@ -200,10 +204,8 @@ class FedAvgRobustAggregator(object):
 
             training_num += self.sample_num_dict[idx]
 
-        self.args.logger.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
+        self.args.logger.debug("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
-
-        # logging.info("################aggregate: %d" % len(model_list))
         (num0, averaged_params) = model_list[0]
 
         if replacement:
@@ -218,15 +220,6 @@ class FedAvgRobustAggregator(object):
                     )
                 for k in averaged_params.keys():
                     w = local_sample_number / training_num
-
-                    local_layer_update = local_model_gradients[k]
-
-                    if self.robust_aggregator.defense_type == "weak_dp":
-                        if is_weight_param(k):
-                            local_layer_update = self.robust_aggregator.add_noise(
-                                local_layer_update,
-                                self.device
-                            )
                     if is_weight_param(k):
                         if i == 0:
                             averaged_params[k] = local_model_gradients[k]
@@ -244,19 +237,18 @@ class FedAvgRobustAggregator(object):
                     local_sample_number, local_model_params = model_list[i]
                     w = local_sample_number / training_num
 
-                    local_layer_update = local_model_params[k]
-
-                    if self.robust_aggregator.defense_type == "weak_dp":
-                        if is_weight_param(k):
-                            local_layer_update = self.robust_aggregator.add_noise(
-                                local_layer_update,
-                                self.device
-                            )
-
                     if i == 0:
                         averaged_params[k] = local_model_params[k] * w
                     else:
                         averaged_params[k] += local_model_params[k] * w
+
+        if self.robust_aggregator.defense_type == "weak_dp":
+            for k in averaged_params.keys():
+                if is_weight_param(k):
+                    averaged_params[k] = self.robust_aggregator.add_noise(
+                        averaged_params[k],
+                        self.device
+                    )
         
         # update the global model which is cached at the server side
         self.model.load_state_dict(averaged_params)
@@ -308,9 +300,11 @@ class FedAvgRobustAggregator(object):
     def test_target_accuracy(self, round_idx=-1):
         self.model.eval()
         self.model.to(self.device)
-        final_acc, _ = test(self.model, self.device, self.targetted_task_test_loader,
+        final_acc, _ = test(
+            self.model, self.device, self.targetted_task_test_loader,
             criterion=nn.CrossEntropyLoss().to(self.device), 
-            mode="targetted-task", dataset=self.args.dataset, poison_type=self.args.poison_type, logger=self.args.logger)      
+            mode="targetted-task", dataset=self.args.dataset, poison_type=self.args.poison_type, logger=self.args.logger
+        )
         self.model.to('cpu')
         return final_acc
 

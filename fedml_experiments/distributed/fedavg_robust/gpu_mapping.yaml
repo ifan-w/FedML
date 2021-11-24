@@ -8,6 +8,8 @@
 mapping_gpu02_alone_10:
     gpu02: [2, 3, 3, 3]
 
+mapping_gpu02_alone_20:
+    gpu02: [3, 6, 6, 6]
 # this is used for 10 clients and 1 server training within a single machine which has 4 GPUs
 mapping_default:
     ChaoyangHe-GPU-RTX2080Tix4: [3, 3, 3, 2]

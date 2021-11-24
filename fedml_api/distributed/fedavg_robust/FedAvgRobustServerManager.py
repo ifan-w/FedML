@@ -6,11 +6,18 @@ from typing_extensions import final
 
 from torch.distributed.distributed_c10d import send
 
-from fedml_api.distributed.fedavg_robust.message_define import MyMessage
-from fedml_api.distributed.fedavg_robust.FedAvgRobustServerScheduler import FedAvgRobustServerScheduler
-from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
-from fedml_core.distributed.communication.message import Message
-from fedml_core.distributed.server.server_manager import ServerManager
+try:
+    from fedml_api.distributed.fedavg_robust.message_define import MyMessage
+    from fedml_api.distributed.fedavg_robust.FedAvgRobustServerScheduler import FedAvgRobustServerScheduler
+    from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
+    from fedml_core.distributed.communication.message import Message
+    from fedml_core.distributed.server.server_manager import ServerManager
+except ImportError:
+    from FedML.fedml_api.distributed.fedavg_robust.message_define import MyMessage
+    from FedML.fedml_api.distributed.fedavg_robust.FedAvgRobustServerScheduler import FedAvgRobustServerScheduler
+    from FedML.fedml_api.distributed.fedavg.utils import transform_tensor_to_list
+    from FedML.fedml_core.distributed.communication.message import Message
+    from FedML.fedml_core.distributed.server.server_manager import ServerManager
 import wandb
 
 
@@ -29,7 +36,7 @@ class FedAvgRobustServerManager(ServerManager):
         #         ...
         #     }...
         # }
-        self.test_result = {}
+        self.test_result = {i:{} for i in range(self.args.comm_round)}
         self.timestamp = time.time()
 
         # single-shot attack

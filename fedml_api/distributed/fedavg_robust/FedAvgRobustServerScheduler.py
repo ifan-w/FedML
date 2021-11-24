@@ -7,6 +7,7 @@ class FedAvgRobustServerScheduler(object):
     def __init__(self, server_manager, args):
         self.server_manager = server_manager
         self.args = args
+        self.logger = args.logger
         
         # load model, if path specified
         self.model_files = {}
@@ -32,6 +33,7 @@ class FedAvgRobustServerScheduler(object):
                 "models",
                 f"{self.args.dataset}-{self.args.model}",
                 f"{self.args.client_optimizer}-{self.args.lr}-{self.args.comm_round}-{self.args.epochs}-" +
+                f"{self.args.defense_type}-{self.args.norm_bound}-{self.args.stddev}" +
                 time.asctime().replace(" ","-").replace(":", "-")
             )
             os.makedirs(self.model_save_path)
@@ -117,10 +119,34 @@ class FedAvgRobustServerScheduler(object):
         raise NotImplementedError()
 
     def ma_load(self):
-        pass
+        self.require_test = True    # keep test true
+        self.model_replacement = False
+        for start_round, fname in self.model_files.items():
+            self.server_manager.load_model(fname)
+            for i in range(self.args.attack_afterward):
+                self.round_idx = start_round + i
+                wandb.log({
+                    "Round": self.round_idx - start_round,
+                    f"Target/MA/{start_round}-Acc": self.server_manager.get_target_acc()
+                })
+                self.client_idx = self.server_manager.gen_client_idx(self.round_idx)
+                if i % self.args.attack_freq == 0:
+                    self.client_idx[0] = -1 # only use 1 attacker, multiply it if require more attacker
+                yield
 
     def ma_save(self):
-        raise NotImplementedError()
+        self.require_test = True    # keep test true
+        self.model_replacement = False
+        for i in range(self.args.comm_round):
+            self.round_idx = i
+            wandb.log({
+                "Round": self.round_idx,
+                f"Target/MA/0-Acc": self.server_manager.get_target_acc()
+            })
+            self.client_idx = self.server_manager.gen_client_idx(self.round_idx)
+            attacker_idx = self.client_idx < self.args.attack_num
+            self.client_idx[attacker_idx] = ~(self.client_idx[attacker_idx])
+            yield
 
     def step(self):
         try:

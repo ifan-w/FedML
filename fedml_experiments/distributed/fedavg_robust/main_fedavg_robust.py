@@ -1,4 +1,5 @@
 import logging
+import traceback
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(levelname)-8s - %(name)-9s : %(filename)s-%(lineno)s: %(message)s",
@@ -153,7 +154,7 @@ def add_args(parser):
     )
 
     parser.add_argument(
-        '--stddev', type=str, default=0.025, metavar='N',
+        '--stddev', type=float, default=0.025, metavar='N',
         help='the standard deviation of the Gaussian noise added in weak DP defense.'
     )
 
@@ -181,8 +182,16 @@ def add_args(parser):
         help='specify source of data poisoning: |ardis|(for EMNIST), |southwest|howto|(for CIFAR-10)'
     )
     parser.add_argument(
+        '--poison_frac', type=float, default=0.5,
+        help='frac of poison in poisoned data'
+    )
+    parser.add_argument(
         '--attack_case', type=str, default='edge-case',
         help='attack case'
+    )
+    parser.add_argument(
+        '--attack_num', type=int, default=1,
+        help='number of attacker'
     )
     # attacker training procedure
     parser.add_argument(
@@ -242,9 +251,6 @@ def add_args(parser):
 
 
 def load_data(args, dataset_name):
-    # handle the poisoned data loader
-    #  load poisoned dataset
-    poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset = load_poisoned_dataset(args=args)
     # handle the normal data partition
     if dataset_name == "mnist":
         args.logger.info("load_data. dataset_name = %s" % dataset_name)
@@ -279,6 +285,10 @@ def load_data(args, dataset_name):
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num]
+    
+    # handle the poisoned data loader
+    #  load poisoned dataset
+    poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset = load_poisoned_dataset(args=args, dataset=dataset)
 
     return dataset, poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset
 
@@ -392,7 +402,13 @@ if __name__ == "__main__":
     model = create_model(args, model_name=args.model, output_dim=dataset[7])
 
     # start "robust federated averaging (FedAvg)"
-    FedML_FedAvgRobust_distributed(process_id, worker_number, device, comm,
-                 model, train_data_num, train_data_global, test_data_global,
-                 train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-                 poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset, args)
+    try:
+        FedML_FedAvgRobust_distributed(
+            process_id, worker_number, device, comm,
+            model, train_data_num, train_data_global, test_data_global,
+            train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
+            poisoned_train_loader, targetted_task_test_loader, num_dps_poisoned_dataset, args
+        )
+    except Exception as e:
+        logger.error(traceback.format_exc())
+        raise e

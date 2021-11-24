@@ -1,3 +1,4 @@
+from copy import deepcopy
 import logging
 
 import numpy as np
@@ -64,8 +65,8 @@ class CIFAR10_truncated(data.Dataset):
                 data = cifar_dataobj.data
                 target = np.array(cifar_dataobj.targets)
         else:
-            data = self.parent.data
-            target = self.parent.target
+            data = deepcopy(self.parent.data)
+            target = deepcopy(self.parent.target)
 
         if self.dataidxs is not None:
             data = data[self.dataidxs]

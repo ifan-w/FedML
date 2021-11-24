@@ -4,8 +4,10 @@ import numpy as np
 import torch
 from torch import nn
 
-from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
-
+try:
+    from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
+except ImportError:
+    from FedML.fedml_api.distributed.fedavg.utils import transform_tensor_to_list
 
 def test(model, device, test_loader, criterion, mode="raw-task", dataset="cifar10", poison_type="fashion", logger=None):
     if logger == None:
@@ -177,8 +179,12 @@ class FedAvgRobustTrainer(object):
         self.client_index = client_index
         # if self.client_index == 1: # TODO(@hwang595): double check if this makes sense with Chaoyang, we make it the attacker
         if self.client_index < 0:
-            self.train_local = self.poisoned_train_loader
-            self.local_sample_number = self.num_dps_poisoned_dataset
+            if self.args.poison_type in ["plus", "square"]:
+                self.train_local = self.poisoned_train_loader[~client_index]
+                self.local_sample_number = self.num_dps_poisoned_dataset[~client_index]
+            else:
+                self.train_local = self.poisoned_train_loader
+                self.local_sample_number = self.num_dps_poisoned_dataset
             self.adversarial = True
         else:
             self.train_local = self.train_data_local_dict[client_index]
@@ -222,6 +228,7 @@ class FedAvgRobustTrainer(object):
                     )
                 )
             if (
+                self.args.attack_type == "single_shot" and
                 self.adversarial and 
                 self.test_target_accuracy() >= self.args.attack_acc_threshold and 
                 (sum(batch_loss) / len(batch_loss)) <= (self.args.attack_loss_threshold * np.exp(1.6 * (1 - round_idx / self.args.comm_round)))

@@ -10,7 +10,7 @@ GPU_MAPPING_FILE="gpu_mapping.yaml"
 GPU_MAPPING_KEY="mapping_gpu02_alone_10"
 ROUND=10000
 TEST_FREQ=10
-SAVE_FREQ=500
+LOAD_MODEL_PATH="models/cifar10-resnet18/sgd-0.1-10000-2-Sat-Nov-13-15-49-45-2021"
 
 # server defence
 DEFENSE_TYPE="none"
@@ -19,14 +19,17 @@ NORM_BOUND=5.0
 STDDEV=0.025
 
 # attacker client
-POISON_TYPE="southwest"
-ATTACK_FREQ=10
+POISON_TYPE="plus"
+# POISON_TYPE="southwest"
+POISON_FRAC=0.5
+ATTACK_NUM=1
+ATTACK_FREQ=1
 # ATTACK_CASE=
-ATTACKER_EPOCH=500
+ATTACKER_EPOCH=2
 ATTACKER_LR=0.1
 ATTACKER_OPTIM="sgd"
-ATTACKER_TYPE="none"
-ROUNDS_AFTER_ATTACK=100
+ATTACKER_TYPE="multi_shot"
+ROUNDS_AFTER_ATTACK=200
 
 # normal client
 BATCH_SIZE=64
@@ -41,6 +44,13 @@ hostname > mpi_host_file
 
 rm -f output.log
 
+DEFENSE_TYPE="none"
+NORM_BOUND=5.0
+STDDEV=0.025
+ATTACK_NUM=1
+ATTACKER_EPOCH=2
+ATTACKER_LR=0.1
+POISON_FRAC=0.5
 mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.py \
   --client_num_in_total $CLIENT_NUM \
   --client_num_per_round $WORKER_NUM \
@@ -52,10 +62,13 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --gpu_mapping_key $GPU_MAPPING_KEY \
   --comm_round $ROUND \
   --frequency_of_the_test $TEST_FREQ \
+  --load_model_path $LOAD_MODEL_PATH \
   --defense_type $DEFENSE_TYPE \
   --norm_bound $NORM_BOUND \
   --stddev $STDDEV \
   --poison_type $POISON_TYPE \
+  --poison_frac $POISON_FRAC \
+  --attack_num $ATTACK_NUM
   --attack_freq $ATTACK_FREQ \
   --attack_epochs $ATTACKER_EPOCH \
   --attack_lr $ATTACKER_LR \
@@ -66,6 +79,5 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --epochs $EPOCH \
   --lr $LR \
   --client_optimizer $OPTIM \
-  --save_model_freq $SAVE_FREQ \
-  --note "Single shot attack, attacker lr-$ATTACKER_LR ep-$ATTACKER_EPOCH" \
-  --title "NA-$ROUND-$ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM-$MODEL"
+  --note "Multi-shot attack" \
+  --title "MA, $ATTACK_FREQ| $POISON_TYPE-$POISON_FRAC-$ATTACK_NUM <-> $DEFENSE_TYPE-$NORM_BOUND-$STDDEV | $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL"
