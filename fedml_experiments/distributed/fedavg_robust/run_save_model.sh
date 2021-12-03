@@ -68,4 +68,4 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --client_optimizer $OPTIM \
   --save_model_freq $SAVE_FREQ \
   --note "No attack, save the model" \
-  --title "NA | $ROUND-$LR-$EPOCH-$OPTIM | $DEFENSE_TYPE-$NORM_BOUND-$STDDEV | $MODEL"
+  --title "NA | $ROUND-$LR-$EPOCH-$OPTIM | $DEFENSE_TYPE-$NORM_BOUND-$STDDEV | $MODEL, $DATASET"

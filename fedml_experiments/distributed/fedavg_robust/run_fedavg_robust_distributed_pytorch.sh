@@ -72,4 +72,4 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --lr $LR \
   --client_optimizer $OPTIM \
   --note "Single shot attack, attacker lr-$ATTACKER_LR ep-$ATTACKER_EPOCH" \
-  --title "SA, $ATTACKER_LOSS_THRESH, $ATTACKER_ACC_THRESH| sw_edge| $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL"
+  --title "SA, $ATTACKER_LOSS_THRESH, $ATTACKER_ACC_THRESH| sw_edge| $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL, $DATASET"

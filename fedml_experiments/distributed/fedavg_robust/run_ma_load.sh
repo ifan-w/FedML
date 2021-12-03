@@ -80,4 +80,4 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg_robust.p
   --lr $LR \
   --client_optimizer $OPTIM \
   --note "Multi-shot attack" \
-  --title "MA, $ATTACK_FREQ| $POISON_TYPE-$POISON_FRAC-$ATTACK_NUM <-> $DEFENSE_TYPE-$NORM_BOUND-$STDDEV | $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL"
+  --title "MA, $ATTACK_FREQ| $POISON_TYPE-$POISON_FRAC-$ATTACK_NUM <-> $DEFENSE_TYPE-$NORM_BOUND-$STDDEV | $ATTACKER_LR-$ATTACKER_EPOCH-$ATTACKER_OPTIM, $ROUND, $MODEL, $DATASET"

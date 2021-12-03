@@ -37,12 +37,13 @@ class RobustAggregator(object):
         self.stddev = args.stddev  # for weak DP defenses
         self.logger = args.logger
 
-    def weight_to_gradient(self, local_state_dict, global_state_dict):
+    def weight_to_gradient(self, local_state_dict, global_state_dict, rlr_sign=None):
         vec_local_weight = vectorize_weight(local_state_dict)
         vec_global_weight = vectorize_weight(global_state_dict)
 
-        # clip the norm diff
         vec_diff = vec_local_weight - vec_global_weight
+        if rlr_sign != None:
+            vec_diff *= rlr_sign
         gradient = {}
         index_bias = 0
         for k, v in local_state_dict.items():
@@ -71,3 +72,13 @@ class RobustAggregator(object):
                                      device=local_weight.device) * self.stddev
         dp_weight = local_weight + gaussian_noise
         return dp_weight
+
+    def get_rlr_sign(self, model_list, global_model, threshold=0):
+        vec_weight_global = vectorize_weight(global_model)
+        vec_weight_list = [vectorize_weight(model) - vec_weight_global for _, model in model_list]
+        stack_weight = torch.stack(vec_weight_list)
+        rlr_sign = stack_weight.sign().sum(axis=0).abs()
+        self.logger.debug(f"lt thresh={(rlr_sign < threshold).sum()}, ge thresh={(rlr_sign >= threshold).sum()}")
+        rlr_sign[rlr_sign < threshold] = -1
+        rlr_sign[rlr_sign >= threshold] = 1
+        return rlr_sign

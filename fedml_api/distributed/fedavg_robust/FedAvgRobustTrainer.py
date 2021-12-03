@@ -146,7 +146,7 @@ class FedAvgRobustTrainer(object):
         if not self.adversarial:
             if self.args.client_optimizer == "sgd":
                 return torch.optim.SGD(
-                    [{"params" :self.model.parameters(), "initial_lr": self.args.lr}],
+                    [{"params": self.model.parameters(), "initial_lr": self.args.lr}],
                     lr=self.args.lr,
                     momentum=0.9
                 )
@@ -216,6 +216,7 @@ class FedAvgRobustTrainer(object):
                 log_probs = self.model(images)
                 loss = self.criterion(log_probs, labels)
                 loss.backward()
+                nn.utils.clip_grad_norm_(self.model.parameters(), 10)
                 optimizer.step()
                 batch_loss.append(loss.item())
             if len(batch_loss) > 0:

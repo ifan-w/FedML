@@ -191,20 +191,23 @@ class FedAvgRobustAggregator(object):
             # conduct the defense here:
             local_sample_number, local_model_params = self.sample_num_dict[idx], self.model_dict[idx]
             
-            if self.robust_aggregator.defense_type in ("norm_diff_clipping", "weak_dp"):
+            if "norm_diff_clipping" in self.robust_aggregator.defense_type:
                 clipped_local_state_dict = self.robust_aggregator.norm_diff_clipping(
                     local_model_params,
                     self.model.state_dict()
                 )
                 model_list.append((local_sample_number, clipped_local_state_dict))
-            elif self.robust_aggregator.defense_type == "none":
-                model_list.append((local_sample_number, local_model_params))
             else:
-                raise NotImplementedError("Non-supported Defense type ... ")
+                model_list.append((local_sample_number, local_model_params))
 
             training_num += self.sample_num_dict[idx]
 
         self.args.logger.debug("len of self.model_dict[idx] = " + str(len(self.model_dict)))
+
+        rlr_sign = None
+        if "rlr" in self.robust_aggregator.defense_type:
+            self.args.logger.debug("invoke rlr")
+            rlr_sign = self.robust_aggregator.get_rlr_sign(model_list, self.model.state_dict(), threshold=self.args.rlr_thresh)
 
         (num0, averaged_params) = model_list[0]
 
@@ -230,19 +233,36 @@ class FedAvgRobustAggregator(object):
                             averaged_params[k] = local_model_gradients[k] * w
                         else:
                             averaged_params[k] += local_model_gradients[k] * w
-            # pass
         else:   # normal aggregation
-            for k in averaged_params.keys():
-                for i in range(0, len(model_list)):
-                    local_sample_number, local_model_params = model_list[i]
-                    w = local_sample_number / training_num
-
-                    if i == 0:
-                        averaged_params[k] = local_model_params[k] * w
+            averaged_params = copy.deepcopy(self.get_global_model_params())
+            for i in range(0, len(model_list)):
+                local_sample_number, local_model_params = model_list[i]
+                w = local_sample_number / training_num
+                local_model_gradients = self.robust_aggregator.weight_to_gradient(
+                    local_model_params,
+                    self.model.state_dict(),
+                    rlr_sign=rlr_sign
+                )
+                for k in averaged_params.keys():
+                    if is_weight_param(k):
+                        averaged_params[k] += local_model_gradients[k] * w
                     else:
-                        averaged_params[k] += local_model_params[k] * w
+                        if i == 0:
+                            averaged_params[k] = local_model_gradients[k] * w
+                        else:
+                            averaged_params[k] += local_model_gradients[k] * w
 
-        if self.robust_aggregator.defense_type == "weak_dp":
+            # for k in averaged_params.keys():
+            #     for i in range(0, len(model_list)):
+            #         local_sample_number, local_model_params = model_list[i]
+            #         w = local_sample_number / training_num
+
+            #         if i == 0:
+            #             averaged_params[k] = local_model_params[k] * w
+            #         else:
+            #             averaged_params[k] += local_model_params[k] * w
+
+        if "weak_dp" in self.robust_aggregator.defense_type:
             for k in averaged_params.keys():
                 if is_weight_param(k):
                     averaged_params[k] = self.robust_aggregator.add_noise(

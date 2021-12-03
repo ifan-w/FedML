@@ -38,6 +38,7 @@ try:
     from fedml_api.model.cv.mobilenet import mobilenet
     from fedml_api.model.cv.resnet import resnet56
     from fedml_api.model.cv.resnet_cifar import ResNet18
+    from fedml_api.model.cv.cnn import CNN_CIFAR as SimpleCNNCIFAR
 
     # for loading poisoned dataset
     from fedml_api.data_preprocessing.edge_case_examples.data_loader import load_poisoned_dataset
@@ -156,6 +157,11 @@ def add_args(parser):
     parser.add_argument(
         '--stddev', type=float, default=0.025, metavar='N',
         help='the standard deviation of the Gaussian noise added in weak DP defense.'
+    )
+
+    parser.add_argument(
+        '--rlr_thresh', type=int, default=0, metavar='N',
+        help='Robust learning-rate threshold'
     )
 
     #parser.add_argument('--attack_method', type=str, default="blackbox",
@@ -308,6 +314,8 @@ def create_model(args, model_name, output_dim):
         model = ResNet18()
     elif model_name == "mobilenet":
         model = mobilenet(class_num=output_dim)
+    elif model_name == "simple_cnn_cifar":
+        model = SimpleCNNCIFAR()
     return model
 
 
